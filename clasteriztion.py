@@ -7,6 +7,7 @@ from sklearn.decomposition import PCA
 import seaborn as sns
 import numpy as np
 from scipy.special import comb
+from sklearn import metrics
 
 plot_kwds = {'alpha' : 0.25, 's' : 80, 'linewidths':0}
 
@@ -41,12 +42,17 @@ def plot_dendrogram(model, **kwargs):
 
 df = pandas.read_csv("hotel_bokings_2016.csv", sep=',')
 
+stays_mean = df['days_in_hotel'].mean()
+stays_std = df['days_in_hotel'].std()
+limit  = 3*stays_std
 labels = ['days_in_hotel', 'all_guests']
 months = ["January", "February", "March", "April", "May", "June", "July"]
 #data = df.loc[:, labels[:-1]].values
 data_list = []
 for i in range(len(df)):
     if df["arrival_date_month"][i] in months:
+        if np.fabs(df['days_in_hotel'][i] - stays_mean) > limit:
+            continue
         data_list.append([df["days_in_hotel"][i], df["all_guests"][i]])
 
 print(len(data_list))
@@ -68,15 +74,67 @@ cluster = agg_clustering.fit(data)
 # frame.axes.get_yaxis().set_visible(False)
 # plt.show()
 
+# for label in labels:
+#     label_mean = df[label].mean()
+#     print("LABEL: " + label + "  mean: " + str(label_mean))
+#     data_dict = {}
+#     count_dict = {}
+#     for i in range(len(df)):
+#         key = cluster.labels_[i]
+#         if key not in data_dict:
+#             data_dict[key] = 0
+#             count_dict[key] = 0
+#         data_dict[cluster.labels_[i]] += df[label][i]
+#         count_dict[key] += 1
+#
+#     for i in data_dict.keys():
+#         print("cluster: " + str(i) + " mean: " + str(data_dict[i]/count_dict[i]))
+#     print("\n\n")
 
+
+max = 0
+clusters_number = 0
+for no_of_clusters in range(2, 100):
+    mean = 0.0
+    times = 10
+    for _ in range(times):
+        kmeans = KMeans(n_clusters=no_of_clusters).fit(data_list)
+        labels = kmeans.labels_
+        mean += metrics.calinski_harabasz_score(data_list, labels)
+
+    mean = mean/times
+    if mean > max:
+        max = mean
+        clusters_number = no_of_clusters
+    print("For the number of clusters: " + str(no_of_clusters) + " score is: " + str(mean))
+
+print("MAX SCORE: " + str(max) + " for number of clusters: " + str(clusters_number))
 
 
 # pca = PCA(n_components=2)
 # pca_data = pca.fit_transform(data)
 kmeans = KMeans(n_clusters=8)
-kmeans.fit(data)
+result_k_means = kmeans.fit(data)
 y_means = kmeans.predict(data)
 
 plt.scatter(data[:, 0], data[:, 1], c=y_means, s=50, cmap='viridis')
 
 plt.show()
+
+print("Global mean days stayed: " + str(df["days_in_hotel"].mean()))
+print("Global mean guests: " + str(df["all_guests"].mean()))
+
+cluster_labels = result_k_means.labels_
+
+cluster_means = {}
+
+for i in range(len(data)):
+    if cluster_labels[i] not in cluster_means:
+        cluster_means[cluster_labels[i]] = []
+    cluster_means[cluster_labels[i]].append([data[i][0], data[i][1]])
+
+for key, values in cluster_means.items():
+        days = sum([j[0]  for j in values])/len(values)
+        guests = sum([j[1]  for j in values])/len(values)
+
+        print("For cluster " + str(key) + "means are: " + str(days) + "  " + str(guests))
